@@ -10,6 +10,7 @@ class User:
     SAMPLE_SPREADSHEET_ID = ''
     SAMPLE_RANGE_NAME = ''
     counter = 0
+    all_works = 0
 
 
 # Делаем клавиатуру
@@ -41,7 +42,6 @@ def send_welcome(message):
     bot.send_message(message.chat.id, 'Выбери преподавателя:', reply_markup=makeKeyboard_teacher())
 
 
-
 @bot.callback_query_handler(func=lambda call: call.data in list(teacher.teacher.values()))
 def handle_query(call):
     User.SAMPLE_SPREADSHEET_ID = call.data
@@ -49,7 +49,7 @@ def handle_query(call):
 
 
 def group_list(message):
-    #bot.edit_message_reply_markup(message.chat.id, message.inline_message_id, 'g', reply_markup=makeKeyboard_group_list())
+    # bot.edit_message_reply_markup(message.chat.id, message.inline_message_id, 'g', reply_markup=makeKeyboard_group_list())
     bot.edit_message_reply_markup(message.chat.id, message_id=message.message_id, reply_markup=None)
     bot.delete_message(message.chat.id, message.message_id)
     bot.send_message(message.chat.id, 'Выберите группу:', reply_markup=makeKeyboard_group_list())
@@ -79,8 +79,10 @@ def request_full_name(message):
         btn2 = telebot.types.KeyboardButton('Что я сдал/сдала')
         btn3 = telebot.types.KeyboardButton('Что я должен/должна')
         markup.add(btn1, btn2, btn3)
+        all_works = len(result.result_rows(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)[User.counter])
+        User.all_works = all_works - 2
         bot.send_message(message.chat.id, f'Всего лабораторных работ: '
-                f'{len(result.result_rows(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)[User.counter]) - 2}',
+                                          f'{User.all_works}',
                          reply_markup=markup)
         bot.register_next_step_handler(message, response_processing)
 
@@ -98,28 +100,44 @@ def response_processing(message):
 
 def all_rating(message):
     markup = telebot.types.ReplyKeyboardRemove(selective=False)
-    bot.send_message(message.chat.id, 'вот тебе весь список', reply_markup=markup)
+    bot.send_message(message.chat.id, 'Вот тебе весь список', reply_markup=markup)
     rating = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)
-    for i in range(len(rating)):
-        bot.send_message(message.chat.id, f'{rating[i][0]} - {rating[i][User.counter]}')
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn = telebot.types.KeyboardButton('/start')
-    markup.add(btn)
-    bot.send_message(message.chat.id, 'Нажмите на кнопку, если хотите начать сначала', reply_markup=markup)
-
-
+    for i in range(1, len(rating) - 1):
+        if rating[i][User.counter] in ('0', ''):
+            bot.send_message(message.chat.id, f'{rating[i][0]} - Не сдано')
+        else:
+            bot.send_message(message.chat.id, f'{rating[i][0]} - {rating[i][User.counter]}')
+    bot.send_message(message.chat.id, 'Нажмите /start, если хотите начать сначала')
 
 
 def completed_works(message):
     markup = telebot.types.ReplyKeyboardRemove(selective=False)
-    bot.send_message(message.chat.id, 'вот тебе весь список', reply_markup=markup)
-    pass
+    rating = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)
+    _counter = 0
+    for i in range(1, len(rating) - 1):
+        if rating[i][User.counter] not in ('0', ''):
+            bot.send_message(message.chat.id, f'{rating[i][0]} - {rating[i][User.counter]}')
+            _counter += 1
+    if _counter == 0:
+        bot.send_message(message.chat.id, 'Ты ни чего не сдал, бездарь')
+    else:
+        bot.send_message(message.chat.id, f'Ты должен еще {User.all_works - _counter} ')
+    bot.send_message(message.chat.id, 'Нажмите /start, если хотите начать сначала', reply_markup=markup)
 
 
 def non_completed_works(message):
     markup = telebot.types.ReplyKeyboardRemove(selective=False)
-    bot.send_message(message.chat.id, 'вот тебе весь список', reply_markup=markup)
-    pass
+    rating = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)
+    _counter = 0
+    for i in range(1, len(rating) - 1):
+        if rating[i][User.counter] in ('0', ''):
+            bot.send_message(message.chat.id, f'{rating[i][0]} - Не сдано')
+            _counter += 1
+    if _counter == 0:
+        bot.send_message(message.chat.id, 'У тебя всё сдано, молодец')
+    else:
+        bot.send_message(message.chat.id, f'Ты должен еще {User.all_works - _counter}', reply_markup=markup)
+    bot.send_message(message.chat.id, 'Нажмите /start, если хотите начать сначала')
 
 
 @bot.message_handler(content_types=["text", "audio", "document", "photo", "sticker", "video", "video_note", "voice"])
