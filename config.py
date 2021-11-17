@@ -2,6 +2,7 @@ from google.oauth2 import service_account
 import os
 from googleapiclient.discovery import build
 
+chat_id = '-748764953'
 token = '2129377067:AAECIAkGnDTJABdUqraDoIz1xL0Vv2mbLrc'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SERVICE_ACCOUNT_FILE = f'{os.getcwd()}\service.json'

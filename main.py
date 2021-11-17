@@ -11,6 +11,7 @@ class User:
     SAMPLE_RANGE_NAME = ''
     counter = 0
     all_works = 0
+    full_name = ''
 
 
 # Делаем клавиатуру
@@ -38,7 +39,9 @@ def makeKeyboard_group_list():
 # Приветствуем пользователя и говорим что умеем
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, f'Привет,{message.from_user.first_name}, я помогу тебе узнать твои долги')
+    markup = telebot.types.ReplyKeyboardRemove(selective=False)
+    bot.send_message(message.chat.id, f'Привет,{message.from_user.first_name}, я помогу тебе узнать твои долги',
+                     reply_markup=markup)
     bot.send_message(message.chat.id, 'Выбери преподавателя:', reply_markup=makeKeyboard_teacher())
 
 
@@ -49,7 +52,6 @@ def handle_query(call):
 
 
 def group_list(message):
-    # bot.edit_message_reply_markup(message.chat.id, message.inline_message_id, 'g', reply_markup=makeKeyboard_group_list())
     bot.edit_message_reply_markup(message.chat.id, message_id=message.message_id, reply_markup=None)
     bot.delete_message(message.chat.id, message.message_id)
     bot.send_message(message.chat.id, 'Выберите группу:', reply_markup=makeKeyboard_group_list())
@@ -65,20 +67,22 @@ def handle_query2(call):
 
 
 def request_full_name(message):
+    print(message.text)
+    User.full_name = message.text
     full_name = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)[0]
     for i in range(len(full_name)):
         if full_name[i].lower() == message.text.lower():
             User.counter = i
             break
     if User.counter == 0:
-        bot.send_message(message.chat.id, 'Такого пользователя нет в базе')
-        echo_text(message)
+        bot.send_message(message.chat.id, 'Такого пользователя нет в группе')
+        bot.send_message(message.chat.id, 'Введите ваше ФИО')
+        bot.register_next_step_handler(message, request_full_name)
     else:
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=True)
         btn1 = telebot.types.KeyboardButton('Узнать все оценки')
-        btn2 = telebot.types.KeyboardButton('Что я сдал/сдала')
-        btn3 = telebot.types.KeyboardButton('Что я должен/должна')
-        markup.add(btn1, btn2, btn3)
+        btn4 = telebot.types.KeyboardButton('Средний балл')
+        markup.add(btn1, btn4)
         all_works = len(result.result_rows(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)[User.counter])
         User.all_works = all_works - 2
         bot.send_message(message.chat.id, f'Всего лабораторных работ: '
@@ -90,54 +94,35 @@ def request_full_name(message):
 def response_processing(message):
     if message.text == 'Узнать все оценки':
         all_rating(message)
-    elif message.text == 'Что я сдал/сдала':
-        completed_works(message)
-    elif message.text == 'Что я должен/должна':
-        non_completed_works(message)
+    elif message.text == 'Средний балл':
+        average_score(message)
     else:
         echo_text(message)
 
 
 def all_rating(message):
-    markup = telebot.types.ReplyKeyboardRemove(selective=False)
-    bot.send_message(message.chat.id, 'Вот тебе весь список', reply_markup=markup)
     rating = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)
     for i in range(1, len(rating) - 1):
-        if rating[i][User.counter] in ('0', ''):
+        try:
+            if rating[i][User.counter] in ('0', '', ' ', '-'):
+                bot.send_message(message.chat.id, f'{rating[i][0]} - Не сдано')
+            else:
+                bot.send_message(message.chat.id, f'{rating[i][0]} - {rating[i][User.counter]}')
+        except IndexError:
             bot.send_message(message.chat.id, f'{rating[i][0]} - Не сдано')
-        else:
-            bot.send_message(message.chat.id, f'{rating[i][0]} - {rating[i][User.counter]}')
-    bot.send_message(message.chat.id, 'Нажмите /start, если хотите начать сначала')
+    bot.send_message(config.chat_id, f'Пользователь {message.from_user.first_name}, '
+                                     f'{message.from_user.username} обращался к боту, запрашивал ФИО {User.full_name}',
+                     parse_mode="Markdown")
+    bot.register_next_step_handler(message, response_processing)
 
 
-def completed_works(message):
-    markup = telebot.types.ReplyKeyboardRemove(selective=False)
+def average_score(message):
     rating = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)
-    _counter = 0
-    for i in range(1, len(rating) - 1):
-        if rating[i][User.counter] not in ('0', ''):
-            bot.send_message(message.chat.id, f'{rating[i][0]} - {rating[i][User.counter]}')
-            _counter += 1
-    if _counter == 0:
-        bot.send_message(message.chat.id, 'Ты ни чего не сдал, бездарь')
-    else:
-        bot.send_message(message.chat.id, f'Ты должен еще {User.all_works - _counter} ')
-    bot.send_message(message.chat.id, 'Нажмите /start, если хотите начать сначала', reply_markup=markup)
-
-
-def non_completed_works(message):
-    markup = telebot.types.ReplyKeyboardRemove(selective=False)
-    rating = result.result_columns(User.SAMPLE_RANGE_NAME, User.SAMPLE_SPREADSHEET_ID)
-    _counter = 0
-    for i in range(1, len(rating) - 1):
-        if rating[i][User.counter] in ('0', ''):
-            bot.send_message(message.chat.id, f'{rating[i][0]} - Не сдано')
-            _counter += 1
-    if _counter == 0:
-        bot.send_message(message.chat.id, 'У тебя всё сдано, молодец')
-    else:
-        bot.send_message(message.chat.id, f'Ты должен еще {User.all_works - _counter}', reply_markup=markup)
-    bot.send_message(message.chat.id, 'Нажмите /start, если хотите начать сначала')
+    bot.send_message(message.chat.id, f'Твой средний балл = {rating[User.all_works + 1][User.counter]}')
+    bot.send_message(config.chat_id, f'Пользователь {message.from_user.first_name}, '
+                                     f'{message.from_user.username} обращался к боту, запрашивал ФИО {User.full_name}',
+                     parse_mode="Markdown")
+    bot.register_next_step_handler(message, response_processing)
 
 
 @bot.message_handler(content_types=["text", "audio", "document", "photo", "sticker", "video", "video_note", "voice"])
